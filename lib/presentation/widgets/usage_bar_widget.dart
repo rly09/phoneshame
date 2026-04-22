@@ -8,60 +8,142 @@ class UsageBarWidget extends StatelessWidget {
 
   const UsageBarWidget({super.key, required this.apps});
 
+  Color _getScoreColor(int totalMinutes) {
+    if (totalMinutes <= 400) return AppColors.green;
+    if (totalMinutes <= 700) return AppColors.amber;
+    return AppColors.red;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (apps.isEmpty) {
-      return const Center(child: Text("No apps used yet today."));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 32.0),
+          child: Column(
+            children: [
+              Icon(Icons.hourglass_empty, size: 48, color: AppColors.primary.withAlpha(100)),
+              const SizedBox(height: 16),
+              Text(
+                "open some apps first 😅",
+                style: TextStyle(fontSize: 16, color: AppColors.primary.withAlpha(150)),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     final topApps = apps.take(5).toList();
     final maxUsageStr = topApps.first.totalTimeInMinutes;
     final maxUsage = maxUsageStr > 0 ? maxUsageStr : 1;
+    final totalMinutes = apps.fold<int>(0, (sum, item) => sum + item.totalTimeInMinutes);
+    final barColor = _getScoreColor(totalMinutes);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Padding(
-          padding: EdgeInsets.only(bottom: 16.0),
+          padding: EdgeInsets.only(bottom: 24.0),
           child: Text(
-            "Top Wastes of Time",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            "WHERE YOUR TIME WENT",
+            style: TextStyle(
+              fontSize: 14, 
+              fontWeight: FontWeight.w600, 
+              letterSpacing: 2,
+              color: AppColors.primary,
+            ),
           ),
         ),
-        ...topApps.map((app) {
-          final fraction = app.totalTimeInMinutes / maxUsage;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        app.appName,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+        Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardTheme.color,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(10),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ]
+          ),
+          child: Column(
+            children: topApps.asMap().entries.map((entry) {
+              final index = entry.key;
+              final app = entry.value;
+              final fraction = app.totalTimeInMinutes / maxUsage;
+              
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: AppColors.lightPurple,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Center(
+                            child: Text(
+                              app.appName.isNotEmpty ? app.appName[0].toUpperCase() : '?',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      app.appName,
+                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Text(
+                                    TimeFormatter.formatMinutesToHours(app.totalTimeInMinutes),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      color: Theme.of(context).textTheme.bodyLarge?.color?.withAlpha(150),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              CustomPaint(
+                                size: const Size(double.infinity, 8),
+                                painter: BarChartPainter(
+                                  fraction: fraction,
+                                  color: barColor,
+                                  backgroundColor: barColor.withAlpha(30),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(TimeFormatter.formatMinutesToHours(app.totalTimeInMinutes)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                CustomPaint(
-                  size: const Size(double.infinity, 24),
-                  painter: BarChartPainter(
-                    fraction: fraction,
-                    color: AppColors.accent,
-                    backgroundColor: AppColors.lightPurple,
                   ),
-                ),
-              ],
-            ),
-          );
-        }),
+                  if (index < topApps.length - 1)
+                    Divider(height: 1, color: Colors.grey.withAlpha(30), indent: 72, endIndent: 16),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
       ],
     );
   }
@@ -84,25 +166,22 @@ class BarChartPainter extends CustomPainter {
       ..color = backgroundColor
       ..style = PaintingStyle.fill;
     
-    // Draw background rounded rect
     final bgRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(0, 0, size.width, size.height),
-      const Radius.circular(8),
+      const Radius.circular(4),
     );
     canvas.drawRRect(bgRect, bgPaint);
 
-    // Draw foreground rounded rect
     final fgPaint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;
     
     final fgWidth = size.width * fraction;
     
-    // Only draw if there's width
     if (fgWidth > 0) {
        final fgRect = RRect.fromRectAndRadius(
         Rect.fromLTWH(0, 0, fgWidth, size.height),
-        const Radius.circular(8),
+        const Radius.circular(4),
       );
       canvas.drawRRect(fgRect, fgPaint);
     }

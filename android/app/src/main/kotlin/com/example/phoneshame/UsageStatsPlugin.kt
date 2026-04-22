@@ -4,6 +4,7 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.util.Calendar
@@ -64,22 +65,36 @@ class UsageStatsPlugin(private val context: Context) : MethodChannel.MethodCallH
         val startTime = calendar.timeInMillis
         val endTime = System.currentTimeMillis()
 
-        val usageStatsList = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_DAILY,
-            startTime,
-            endTime
-        )
-
         val appUsageMap = mutableMapOf<String, Long>()
+        val usageEvents = usageStatsManager.queryEvents(startTime, endTime)
+        val event = android.app.usage.UsageEvents.Event()
+        var activePackage: String? = null
+        var activeStartTime = 0L
 
-        if (usageStatsList != null) {
-            for (stats in usageStatsList) {
-                val timeInForeground = stats.totalTimeInForeground
-                if (timeInForeground > 0) {
-                    val packageName = stats.packageName
-                    appUsageMap[packageName] = (appUsageMap[packageName] ?: 0L) + timeInForeground
+        while (usageEvents.hasNextEvent()) {
+            usageEvents.getNextEvent(event)
+            val packageName = event.packageName ?: continue
+
+            if (isForegroundEvent(event.eventType)) {
+                if (activePackage != null && activeStartTime > 0L && event.timeStamp > activeStartTime) {
+                    val session = event.timeStamp - activeStartTime
+                    appUsageMap[activePackage!!] = (appUsageMap[activePackage!!] ?: 0L) + session
+                }
+                activePackage = packageName
+                activeStartTime = event.timeStamp
+            } else if (isBackgroundEvent(event.eventType)) {
+                if (activePackage == packageName && activeStartTime > 0L && event.timeStamp > activeStartTime) {
+                    val session = event.timeStamp - activeStartTime
+                    appUsageMap[packageName] = (appUsageMap[packageName] ?: 0L) + session
+                    activePackage = null
+                    activeStartTime = 0L
                 }
             }
+        }
+
+        if (activePackage != null && activeStartTime > 0L && endTime > activeStartTime) {
+            val session = endTime - activeStartTime
+            appUsageMap[activePackage!!] = (appUsageMap[activePackage!!] ?: 0L) + session
         }
 
         val resultList = mutableListOf<Map<String, Any>>()
@@ -87,7 +102,7 @@ class UsageStatsPlugin(private val context: Context) : MethodChannel.MethodCallH
         for ((packageName, totalTimeMs) in appUsageMap) {
             // Filter launchable user apps
             val launchIntent = pm.getLaunchIntentForPackage(packageName)
-            if (launchIntent != null) {
+            if (launchIntent != null && packageName != context.packageName) {
                 val appName = try {
                     val appInfo = pm.getApplicationInfo(packageName, 0)
                     pm.getApplicationLabel(appInfo).toString()
@@ -112,5 +127,23 @@ class UsageStatsPlugin(private val context: Context) : MethodChannel.MethodCallH
         resultList.sortByDescending { (it["totalTimeInMinutes"] as Long) }
 
         return resultList
+    }
+
+    private fun isForegroundEvent(eventType: Int): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED ||
+                eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND
+        } else {
+            eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND
+        }
+    }
+
+    private fun isBackgroundEvent(eventType: Int): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            eventType == android.app.usage.UsageEvents.Event.ACTIVITY_PAUSED ||
+                eventType == android.app.usage.UsageEvents.Event.MOVE_TO_BACKGROUND
+        } else {
+            eventType == android.app.usage.UsageEvents.Event.MOVE_TO_BACKGROUND
+        }
     }
 }
