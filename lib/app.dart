@@ -7,6 +7,7 @@ import 'core/constants/app_strings.dart';
 import 'presentation/screens/onboarding_screen.dart';
 import 'presentation/screens/permission_screen.dart';
 import 'providers/theme_provider.dart';
+import 'data/services/notification_service.dart';
 
 class ROTApp extends ConsumerWidget {
   const ROTApp({super.key});
@@ -41,18 +42,46 @@ class _RootRouter extends StatefulWidget {
   State<_RootRouter> createState() => _RootRouterState();
 }
 
-class _RootRouterState extends State<_RootRouter> {
+class _RootRouterState extends State<_RootRouter> with WidgetsBindingObserver {
   Widget? _home;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _resolve();
+    _handleNotifications();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _handleNotifications();
+    }
+  }
+
+  Future<void> _handleNotifications() async {
+    final ns = NotificationService();
+    // Cancel the 10PM nudge as the app is opened
+    await ns.cancelNudge();
+    // Re-schedule all notifications with fresh data
+    await ns.scheduleAllNotifications();
   }
 
   Future<void> _resolve() async {
     final done = await OnboardingScreen.isCompleted();
     if (!mounted) return;
+    
+    if (!done) {
+      // First launch logic (if any other than permissions)
+    }
+
     setState(() {
       _home = done ? const PermissionScreen() : const OnboardingScreen();
     });
@@ -63,7 +92,9 @@ class _RootRouterState extends State<_RootRouter> {
     if (_home == null) {
       return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: const SizedBox.shrink(),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
       );
     }
     return _home!;

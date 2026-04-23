@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/constants/app_colors.dart';
 import '../../data/services/usage_stats_service.dart';
+import '../../data/services/notification_service.dart';
 import 'home_screen.dart';
 
 class PermissionScreen extends StatefulWidget {
@@ -53,6 +54,10 @@ class _PermissionScreenState extends State<PermissionScreen>
 
   Future<void> _requestAccess() async {
     setState(() => _isLoading = true);
+    
+    // Request notification permissions as well
+    await NotificationService().requestPermissions();
+    
     await _service.requestUsageAccess();
     setState(() => _isLoading = false);
   }
