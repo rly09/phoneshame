@@ -4,7 +4,7 @@ class ScoreCalculator {
   /// 2–4 hrs = 200–500 (moderate)
   /// 4–6 hrs = 500–800 (bad)
   /// 6+ hrs = 800–1000 (shameful)
-  static int calculateShameScore(int totalMinutes) {
+  static int calculateRotScore(int totalMinutes) {
     if (totalMinutes <= 120) {
       return ((totalMinutes / 120) * 200).round();
     } else if (totalMinutes <= 240) {

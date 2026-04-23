@@ -1,35 +1,66 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../constants/app_colors.dart';
 
 class AppTheme {
   static ThemeData get lightTheme {
-    return ThemeData(
-      primaryColor: AppColors.primary,
-      scaffoldBackgroundColor: AppColors.backgroundLight,
-      colorScheme: const ColorScheme.light(
-        primary: AppColors.primary,
-        secondary: AppColors.accent,
-        surface: AppColors.cardLight,
+    final base = ThemeData.light();
+    final colors = AppColors.lightPalette;
+    
+    return base.copyWith(
+      primaryColor: colors.purple,
+      scaffoldBackgroundColor: colors.bg,
+      colorScheme: ColorScheme.light(
+        primary: colors.purple,
+        secondary: colors.amber,
+        surface: colors.surface,
+        onSurface: colors.textPrimary,
+        onPrimary: AppColors.cLightest,
+        error: colors.red,
       ),
-      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.backgroundLight,
+      extensions: [colors],
+      textTheme: GoogleFonts.poppinsTextTheme(base.textTheme).apply(
+        bodyColor: colors.textPrimary,
+        displayColor: colors.textPrimary,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.bg,
         elevation: 0,
-        iconTheme: IconThemeData(color: AppColors.primary),
-        titleTextStyle: TextStyle(color: AppColors.primary, fontSize: 20, fontWeight: FontWeight.bold),
+        scrolledUnderElevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        iconTheme: IconThemeData(color: colors.textPrimary),
+        titleTextStyle: GoogleFonts.poppins(
+          color: colors.textPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
       ),
       cardTheme: CardThemeData(
-        color: AppColors.cardLight,
-        elevation: 2,
-        shadowColor: Colors.black.withAlpha(20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: colors.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: colors.border, width: 1),
+        ),
+      ),
+      dividerTheme: DividerThemeData(
+        color: colors.border,
+        thickness: 1,
+        space: 0,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          minimumSize: const Size.fromHeight(52),
+          backgroundColor: colors.purple,
+          foregroundColor: AppColors.cLightest,
+          textStyle: GoogleFonts.poppins(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          minimumSize: const Size.fromHeight(56),
           elevation: 0,
         ),
       ),
@@ -38,37 +69,74 @@ class AppTheme {
           TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
         },
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colors.surface,
+        modalBackgroundColor: colors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
       ),
     );
   }
 
   static ThemeData get darkTheme {
-    return ThemeData(
-      primaryColor: AppColors.primary,
-      scaffoldBackgroundColor: AppColors.backgroundDark,
-      colorScheme: const ColorScheme.dark(
-        primary: AppColors.primary,
-        secondary: AppColors.accent,
-        surface: AppColors.cardDark,
+    final base = ThemeData.dark();
+    final colors = AppColors.darkPalette;
+    
+    return base.copyWith(
+      primaryColor: colors.purple,
+      scaffoldBackgroundColor: colors.bg,
+      colorScheme: ColorScheme.dark(
+        primary: colors.purple,
+        secondary: colors.amber,
+        surface: colors.surface,
+        onSurface: colors.textPrimary,
+        onPrimary: colors.textPrimary,
+        error: colors.red,
       ),
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.backgroundDark,
+      extensions: [colors],
+      textTheme: GoogleFonts.poppinsTextTheme(base.textTheme).apply(
+        bodyColor: colors.textPrimary,
+        displayColor: colors.textPrimary,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.bg,
         elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
-        titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+        scrolledUnderElevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        iconTheme: IconThemeData(color: colors.textPrimary),
+        titleTextStyle: GoogleFonts.poppins(
+          color: colors.textPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
       ),
       cardTheme: CardThemeData(
-        color: AppColors.cardDark,
-        elevation: 2,
-        shadowColor: Colors.black.withAlpha(50),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: colors.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: colors.border, width: 1),
+        ),
+      ),
+      dividerTheme: DividerThemeData(
+        color: colors.border,
+        thickness: 1,
+        space: 0,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          minimumSize: const Size.fromHeight(52),
+          backgroundColor: colors.purple,
+          foregroundColor: colors.textPrimary,
+          textStyle: GoogleFonts.poppins(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          minimumSize: const Size.fromHeight(56),
           elevation: 0,
         ),
       ),
@@ -77,6 +145,13 @@ class AppTheme {
           TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
         },
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colors.surface,
+        modalBackgroundColor: colors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
       ),
     );
   }

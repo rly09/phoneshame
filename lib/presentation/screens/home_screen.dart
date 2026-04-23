@@ -1,15 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/score_calculator.dart';
 import '../../core/utils/time_formatter.dart';
+import '../../data/models/app_usage_model.dart';
 import '../../providers/usage_provider.dart';
-import '../widgets/animated_shame_ring.dart';
+import '../../providers/theme_provider.dart';
+import '../widgets/animated_rot_ring.dart';
 import '../widgets/roast_bottom_sheet.dart';
+import '../widgets/skeleton_loader.dart';
 import '../widgets/usage_bar_widget.dart';
+import 'streak_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -18,211 +24,325 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
-  
-  String _vsYesterdayStr = "calculating...";
-  bool _vsYesterdayIsPositive = false;
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
+  late AnimationController _pulseCtrl;
+  late Animation<double>   _pulseAnim;
+  Timer? _midnightTimer;
+
+  String _vsYesterdayStr       = '—';
+  bool   _vsYesterdayPositive  = false;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
+    WidgetsBinding.instance.addObserver(this);
+    _pulseCtrl = AnimationController(
+      vsync:    this,
+      duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
-    
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.03).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.02).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
+    _scheduleMidnightRefresh();
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _midnightTimer?.cancel();
+    _pulseCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _calculateVsYesterday(int todayTotalMinutes) async {
-    final prefs = await SharedPreferences.getInstance();
-    final today = DateTime.now();
-    final dateString = "${today.year}-${today.month}-${today.day}";
-    
-    final lastSavedDate = prefs.getString('last_saved_date');
-    final lastSavedMinutes = prefs.getInt('last_saved_minutes');
-
-    if (lastSavedDate == dateString) {
-      // Already saved today, just compare with yesterday's stored value
-      final yesterdayMinutes = prefs.getInt('yesterday_minutes') ?? todayTotalMinutes;
-      _updateVsYesterdayState(todayTotalMinutes, yesterdayMinutes);
-    } else {
-      // It's a new day! Shift today's data to yesterday.
-      if (lastSavedMinutes != null) {
-        await prefs.setInt('yesterday_minutes', lastSavedMinutes);
-      }
-      await prefs.setString('last_saved_date', dateString);
-      final yesterdayMinutes = prefs.getInt('yesterday_minutes') ?? todayTotalMinutes;
-      _updateVsYesterdayState(todayTotalMinutes, yesterdayMinutes);
-    }
-    
-    // Always keep today's rolling total updated
-    await prefs.setInt('last_saved_minutes', todayTotalMinutes);
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) ref.invalidate(usageProvider);
   }
 
-  void _updateVsYesterdayState(int todayMinutes, int yesterdayMinutes) {
-    if (!mounted) return;
-    final diff = todayMinutes - yesterdayMinutes;
-    final isPositive = diff >= 0;
-    final absDiff = diff.abs();
-    
-    setState(() {
-      _vsYesterdayIsPositive = isPositive;
-      _vsYesterdayStr = "${isPositive ? '+' : '-'}${TimeFormatter.formatMinutesToHours(absDiff)}";
+  void _scheduleMidnightRefresh() {
+    _midnightTimer?.cancel();
+    final now         = DateTime.now();
+    final nextMidnight = DateTime(now.year, now.month, now.day)
+        .add(const Duration(days: 1));
+    _midnightTimer = Timer(nextMidnight.difference(now), () {
+      if (!mounted) return;
+      ref.invalidate(usageProvider);
+      _scheduleMidnightRefresh();
     });
+  }
+
+  Future<void> _calculateVsYesterday(int todayMinutes) async {
+    final prefs    = await SharedPreferences.getInstance();
+    final today    = DateTime.now();
+    final dateKey  = '${today.year}-${today.month}-${today.day}';
+    final lastDate = prefs.getString('last_saved_date');
+
+    if (lastDate == dateKey) {
+      final yest = prefs.getInt('yesterday_minutes') ?? todayMinutes;
+      _setVs(todayMinutes, yest);
+    } else {
+      final last = prefs.getInt('last_saved_minutes');
+      if (last != null) await prefs.setInt('yesterday_minutes', last);
+      await prefs.setString('last_saved_date', dateKey);
+      final yest = prefs.getInt('yesterday_minutes') ?? todayMinutes;
+      _setVs(todayMinutes, yest);
+    }
+    await prefs.setInt('last_saved_minutes', todayMinutes);
+
+    // Persist today's score for streak screen
+    final score = ScoreCalculator.calculateRotScore(todayMinutes);
+    await prefs.setInt(
+        'score_${today.year}_${today.month}_${today.day}', score);
+  }
+
+  void _setVs(int today, int yesterday) {
+    if (!mounted) return;
+    final diff = today - yesterday;
+    setState(() {
+      _vsYesterdayPositive = diff >= 0;
+      _vsYesterdayStr = diff == 0
+          ? '±0'
+          : '${diff >= 0 ? '+' : ''}${TimeFormatter.formatMinutesToHours(diff.abs())}';
+    });
+  }
+
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'good morning,';
+    if (h < 17) return 'still scrolling?';
+    if (h < 21) return 'put it down.';
+    return 'go to sleep.';
   }
 
   @override
   Widget build(BuildContext context) {
     final usageAsync = ref.watch(usageProvider);
-    final dateStr = DateFormat('EEEE, d MMMM').format(DateTime.now()).toLowerCase();
+    final dateStr    = DateFormat('EEEE, d MMMM').format(DateTime.now()).toLowerCase();
+    final isDark     = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: context.colors.bg,
       body: SafeArea(
         child: RefreshIndicator(
-          color: AppColors.primary,
-          onRefresh: () async {
-            ref.invalidate(usageProvider);
-          },
+          color:       context.colors.purple,
+          strokeWidth: 2.5,
+          onRefresh: () async => ref.invalidate(usageProvider),
           child: usageAsync.when(
-            data: (apps) {
-              final totalMinutes = apps.fold<int>(0, (sum, item) => sum + item.totalTimeInMinutes);
-              final score = ScoreCalculator.calculateShameScore(totalMinutes);
-              final totalTimeStr = TimeFormatter.formatMinutesToHours(totalMinutes);
-              final topApp = apps.isNotEmpty ? apps.first.appName : 'None';
-              
-              _calculateVsYesterday(totalMinutes);
+            loading: () => const HomeSkeletonLoader(),
+            error:   (e, _) => _ErrorView(error: e.toString()),
+            data:    (apps) {
+              final totalMins  = apps.fold<int>(0, (s, a) => s + a.totalTimeInMinutes);
+              final score      = ScoreCalculator.calculateRotScore(totalMins);
+              final totalStr   = TimeFormatter.formatMinutesToHours(totalMins);
+              final topApp     = apps.isNotEmpty ? apps.first.appName : 'none';
+
+              _calculateVsYesterday(totalMins);
 
               return SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Top Bar
+                    // ── Top bar ───────────────────────────────────────────
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          "phoneshame",
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -1,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _greeting(),
+                                style: GoogleFonts.poppins(
+                                  color:      context.colors.textPrimary,
+                                  fontSize:   22,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                dateStr,
+                                style: GoogleFonts.poppins(
+                                  color:   context.colors.textTertiary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.settings_outlined),
-                          onPressed: () {
-                            // Settings not implemented
+                        // Theme toggle button
+                        GestureDetector(
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            ref.read(themeProvider.notifier).toggleTheme();
                           },
-                        )
+                          child: Container(
+                            width:  44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color:  context.colors.surface,
+                              shape:  BoxShape.circle,
+                              border: Border.all(color: context.colors.border),
+                              boxShadow: isDark ? null : [
+                                BoxShadow(
+                                  color: AppColors.cDarkest.withOpacity(0.04),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                )
+                              ],
+                            ),
+                            child: Center(
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 300),
+                                transitionBuilder: (child, anim) => RotationTransition(
+                                  turns: child.key == const ValueKey('moon') 
+                                    ? Tween<double>(begin: 0.5, end: 1).animate(anim)
+                                    : Tween<double>(begin: 0.5, end: 1).animate(anim),
+                                  child: FadeTransition(opacity: anim, child: child),
+                                ),
+                                child: isDark
+                                    ? const Icon(Icons.nightlight_round, key: ValueKey('moon'), size: 20, color: AppColors.cLight)
+                                    : const Icon(Icons.wb_sunny_rounded, key: ValueKey('sun'), size: 20, color: AppColors.cPrimary),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Streak button
+                        GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            PageRouteBuilder(
+                              pageBuilder:        (_, __, ___) => const StreakScreen(),
+                              transitionsBuilder: (_, anim, __, child) =>
+                                  FadeTransition(opacity: anim, child: child),
+                              transitionDuration:
+                                  const Duration(milliseconds: 200),
+                            ),
+                          ),
+                          child: Container(
+                            width:  44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color:  context.colors.surface,
+                              shape:  BoxShape.circle,
+                              border: Border.all(color: context.colors.border),
+                              boxShadow: isDark ? null : [
+                                BoxShadow(
+                                  color: AppColors.cDarkest.withOpacity(0.04),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                )
+                              ],
+                            ),
+                            child: const Center(
+                              child: Text('📊', style: TextStyle(fontSize: 20)),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      dateStr,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Theme.of(context).textTheme.bodyLarge?.color?.withAlpha(150),
-                        fontWeight: FontWeight.w500,
+                    const SizedBox(height: 36),
+
+                    // ── Shame ring ────────────────────────────────────────
+                    Center(
+                      child: AnimatedRotRing(
+                        score:       score,
+                        totalTimeStr: totalStr,
                       ),
                     ),
                     const SizedBox(height: 40),
-                    
-                    // Shame Score Ring
-                    AnimatedShameRing(
-                      score: score,
-                      totalTimeStr: totalTimeStr,
-                    ),
-                    const SizedBox(height: 48),
-                    
-                    // Stats Row
+
+                    // ── Stats strip ───────────────────────────────────────
                     Row(
                       children: [
+                        Expanded(child: _StatPill(label: 'today',       value: totalStr)),
+                        const SizedBox(width: 10),
+                        Expanded(child: _StatPill(label: 'top app',     value: topApp)),
+                        const SizedBox(width: 10),
                         Expanded(
-                          child: _StatCard(
-                            title: "total time",
-                            value: totalTimeStr,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _StatCard(
-                            title: "most used",
-                            value: topApp,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _StatCard(
-                            title: "vs yesterday",
-                            value: _vsYesterdayStr,
-                            valueColor: _vsYesterdayIsPositive ? AppColors.red : AppColors.green,
+                          child: _StatPill(
+                            label:      'vs yesterday',
+                            value:      _vsYesterdayStr,
+                            valueColor: _vsYesterdayPositive
+                                ? context.colors.red
+                                : context.colors.green,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 48),
-                    
-                    // Usage List
+                    const SizedBox(height: 40),
+
+                    // ── Usage list ────────────────────────────────────────
                     UsageBarWidget(apps: apps),
-                    const SizedBox(height: 48),
-                    
-                    // Roast Button
+                    const SizedBox(height: 40),
+
+                    // ── Roast CTA ─────────────────────────────────────────
                     AnimatedBuilder(
-                      animation: _pulseAnimation,
-                      builder: (context, child) {
-                        return Transform.scale(
-                          scale: _pulseAnimation.value,
-                          child: child,
-                        );
-                      },
+                      animation: _pulseAnim,
+                      builder:   (_, child) => Transform.scale(
+                        scale: _pulseAnim.value,
+                        child: child,
+                      ),
                       child: SizedBox(
                         height: 56,
                         child: ElevatedButton(
                           onPressed: () {
                             HapticFeedback.mediumImpact();
                             showModalBottomSheet(
-                              context: context,
+                              context:           context,
                               isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (context) => const RoastBottomSheet(),
+                              backgroundColor:   Colors.transparent,
+                              builder:           (_) => const RoastBottomSheet(),
                             );
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
+                            backgroundColor: context.colors.purple,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            elevation: 8,
-                            shadowColor: AppColors.primary.withAlpha(100),
+                            elevation: 0,
+                            shadowColor: context.colors.purple.withAlpha(isDark ? 100 : 50),
+                          ).copyWith(
+                            // Glow via box decoration override via shadow
+                            elevation: WidgetStateProperty.all(0),
                           ),
-                          child: const Text(
-                            "roast me 🔥",
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:      context.colors.purple.withAlpha(isDark ? 100 : 50),
+                                  blurRadius: 20,
+                                  spreadRadius: 0,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'roast me',
+                                  style: GoogleFonts.poppins(
+                                    color:      context.colors.bg,
+                                    fontSize:   16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Text('🔥', style: TextStyle(fontSize: 18)),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 32),
                   ],
                 ),
               );
             },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text("Error: $err")),
           ),
         ),
       ),
@@ -230,53 +350,98 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   }
 }
 
-class _StatCard extends StatelessWidget {
-  final String title;
+// ── Stat pill card ───────────────────────────────────────────────────────────
+
+class _StatPill extends StatelessWidget {
+  final String label;
   final String value;
   final Color? valueColor;
 
-  const _StatCard({required this.title, required this.value, this.valueColor});
+  const _StatPill({required this.label, required this.value, this.valueColor});
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
+        color:        context.colors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border:       Border.all(color: context.colors.border),
+        boxShadow: isDark ? null : [
           BoxShadow(
-            color: Colors.black.withAlpha(10),
+            color: AppColors.cDarkest.withOpacity(0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           )
-        ]
+        ],
       ),
       child: Column(
         children: [
           Text(
-            title.toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-              color: Theme.of(context).textTheme.bodyLarge?.color?.withAlpha(150),
+            label.toUpperCase(),
+            style: GoogleFonts.poppins(
+              fontSize:      9,
+              fontWeight:    FontWeight.w600,
+              letterSpacing: 1,
+              color:         context.colors.textTertiary,
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             value,
-            style: TextStyle(
-              fontSize: 14,
+            style: GoogleFonts.poppins(
+              fontSize:   13,
               fontWeight: FontWeight.w700,
-              color: valueColor ?? Theme.of(context).textTheme.bodyLarge?.color,
+              color:      valueColor ?? context.colors.textPrimary,
             ),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            textAlign:  TextAlign.center,
+            maxLines:   1,
+            overflow:   TextOverflow.ellipsis,
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Error view ───────────────────────────────────────────────────────────────
+
+class _ErrorView extends StatelessWidget {
+  final String error;
+  const _ErrorView({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('💀', style: TextStyle(fontSize: 48)),
+            const SizedBox(height: 16),
+            Text(
+              'something broke',
+              style: GoogleFonts.poppins(
+                color:      context.colors.textPrimary,
+                fontSize:   20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              style: GoogleFonts.poppins(
+                color:   context.colors.textSecondary,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

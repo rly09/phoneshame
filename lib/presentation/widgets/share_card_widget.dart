@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
+import 'arc_gauge_widget.dart';
 
 class ShareCardWidget extends StatelessWidget {
   final GlobalKey repaintKey;
-  final int score;
+  final int    score;
   final String totalTime;
   final String topApp;
   final String roastSnippet;
+  final String vsYesterday;
 
   const ShareCardWidget({
     super.key,
@@ -15,179 +19,143 @@ class ShareCardWidget extends StatelessWidget {
     required this.totalTime,
     required this.topApp,
     required this.roastSnippet,
+    this.vsYesterday = '',
   });
-
-  String _getLabelForScore() {
-    if (score <= 400) return "not bad 👀";
-    if (score <= 700) return "needs help 😬";
-    return "certified addict 💀";
-  }
-
-  Color _getColorForScore() {
-    if (score <= 400) return AppColors.green;
-    if (score <= 700) return AppColors.amber;
-    return AppColors.red;
-  }
 
   @override
   Widget build(BuildContext context) {
-    // Current date format manually to avoid adding intl if not explicitly set in format
-    // But since we can use standard DateTime, let's just do that
-    final dateStr = "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}";
+    final scoreColor = ScoreColors.scoreColor(context, score.toDouble());
+    final label      = ScoreColors.rotLabel(score);
+    final dateStr    = DateFormat('d MMM yyyy').format(DateTime.now());
 
     return RepaintBoundary(
       key: repaintKey,
       child: Container(
-        width: 400,
-        height: 600,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A1535), Color(0xFF26215C)],
-          ),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(50),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            )
-          ]
-        ),
-        child: Stack(
+        width:  400,
+        constraints: const BoxConstraints(minHeight: 700),
+        color:  context.colors.bg,
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Positioned(
-              top: 24,
-              left: 24,
-              child: Text(
-                "phoneshame",
-                style: TextStyle(
-                  color: AppColors.lightPurple.withAlpha(150),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.5,
-                ),
+            // ── Header ───────────────────────────────────────────────────
+            Text(
+              'ROT',
+              style: GoogleFonts.poppins(
+                color:         context.colors.textTertiary,
+                fontSize:      11,
+                fontWeight:    FontWeight.w700,
+                letterSpacing: 3,
               ),
             ),
+            const SizedBox(height: 12),
+            Container(height: 1, color: context.colors.border),
+            const SizedBox(height: 28),
+
+            // ── Score block ───────────────────────────────────────────────
             Center(
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     score.toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 100,
-                      fontWeight: FontWeight.w900,
-                      height: 1.0,
+                    style: GoogleFonts.poppins(
+                      color:         scoreColor,
+                      fontSize:      96,
+                      fontWeight:    FontWeight.w800,
+                      height:        1.0,
+                      letterSpacing: -4,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: _getColorForScore().withAlpha(40),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: _getColorForScore().withAlpha(100)),
-                    ),
-                    child: Text(
-                      _getLabelForScore(),
-                      style: TextStyle(
-                        color: _getColorForScore(),
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
+                  Text(
+                    label,
+                    style: GoogleFonts.poppins(
+                      color:      scoreColor,
+                      fontSize:   16,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 48),
-                  Container(
-                    width: 320,
-                    height: 1,
-                    color: Colors.white.withAlpha(20),
-                  ),
-                  const SizedBox(height: 32),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _StatItem(label: "time", value: totalTime),
-                      Container(height: 30, width: 1, color: Colors.white.withAlpha(30)),
-                      _StatItem(label: "top app", value: topApp),
-                      Container(height: 30, width: 1, color: Colors.white.withAlpha(30)),
-                      _StatItem(label: "date", value: dateStr),
-                    ],
-                  ),
-                  const SizedBox(height: 48),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Text(
-                      '"$roastSnippet"',
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.lightPurple.withAlpha(200),
-                        fontSize: 18,
-                        fontStyle: FontStyle.italic,
-                      ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'today · $dateStr',
+                    style: GoogleFonts.poppins(
+                      color:   context.colors.textTertiary,
+                      fontSize: 13,
                     ),
                   ),
                 ],
               ),
             ),
-            Positioned(
-              bottom: 24,
-              left: 0,
-              right: 0,
+            const SizedBox(height: 24),
+
+            // ── Stats row ─────────────────────────────────────────────────
+            Center(
               child: Text(
-                "what's your score? #phoneshame",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.lightPurple.withAlpha(100),
+                '$totalTime  ·  $topApp${vsYesterday.isNotEmpty ? '  ·  $vsYesterday' : ''}',
+                style: GoogleFonts.poppins(
+                  color:   context.colors.textSecondary,
                   fontSize: 14,
-                  fontWeight: FontWeight.w500,
                 ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // ── Roast quote ───────────────────────────────────────────────
+            if (roastSnippet.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: context.colors.surface,
+                  borderRadius: const BorderRadius.only(
+                    topRight:    Radius.circular(12),
+                    bottomRight: Radius.circular(12),
+                  ),
+                  border: Border(
+                    left: BorderSide(color: context.colors.red, width: 3),
+                  ),
+                ),
+                child: Text(
+                  '"$roastSnippet"',
+                  style: GoogleFonts.poppins(
+                    color:     context.colors.textPrimary,
+                    fontSize:  14,
+                    fontStyle: FontStyle.italic,
+                    height:    1.5,
+                  ),
+                ),
+              ),
+
+            const SizedBox(height: 48),
+
+            // ── Mini gauge ────────────────────────────────────────────────
+            Center(
+              child: Column(
+                children: [
+                  ArcGaugeWidget(animatedScore: score.toDouble(), size: 120),
+                  const SizedBox(height: 4),
+                  Text(
+                    "what's your score?",
+                    style: GoogleFonts.poppins(
+                      color:   context.colors.textTertiary,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '#rot',
+                    style: GoogleFonts.poppins(
+                      color:      context.colors.purple,
+                      fontSize:   12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _StatItem extends StatelessWidget {
-  final String label;
-  final String value;
-  
-  const _StatItem({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          label.toUpperCase(), 
-          style: TextStyle(
-            color: Colors.white.withAlpha(150), 
-            fontSize: 10,
-            letterSpacing: 1.5,
-            fontWeight: FontWeight.w600,
-          )
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value, 
-          style: const TextStyle(
-            color: Colors.white, 
-            fontSize: 16, 
-            fontWeight: FontWeight.bold,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
     );
   }
 }

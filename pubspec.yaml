@@ -1,4 +1,4 @@
-name: phoneshame
+name: rot
 description: "A new Flutter project."
 publish_to: 'none'
 version: 0.1.0
@@ -35,10 +35,17 @@ flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#013237"
+  adaptive_icon_foreground: "assets/icon.png"
 
 flutter_native_splash:
-  color: "#26215C"
+  color: "#EAF9E7"
+  color_dark: "#013237"
   image: "assets/icon.png"
+  brand: "ROT"
   android_12:
     image: "assets/icon.png"
-    color: "#26215C"
+    color: "#EAF9E7"
+    color_dark: "#013237"
+  fullscreen: false

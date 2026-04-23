@@ -2,14 +2,15 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import '../../core/constants/app_colors.dart';
-import '../widgets/app_bar_widget.dart';
 import '../widgets/share_card_widget.dart';
 
 class ShareScreen extends StatefulWidget {
-  final int score;
+  final int    score;
   final String topApp;
   final String totalTimeStr;
   final String roastSnippet;
@@ -30,41 +31,46 @@ class _ShareScreenState extends State<ShareScreen> {
   final GlobalKey _repaintKey = GlobalKey();
   bool _isSaving = false;
 
-  Future<Uint8List?> _capturePng() async {
+  Future<Uint8List?> _capture() async {
     try {
-      RenderRepaintBoundary boundary = _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      return byteData?.buffer.asUint8List();
-    } catch (e) {
+      final boundary = _repaintKey.currentContext!.findRenderObject()
+          as RenderRepaintBoundary;
+      final image    = await boundary.toImage(pixelRatio: 3.0);
+      final data     = await image.toByteData(format: ui.ImageByteFormat.png);
+      return data?.buffer.asUint8List();
+    } catch (_) {
       return null;
     }
   }
 
-  Future<void> _saveToGallery() async {
+  Future<void> _save() async {
     setState(() => _isSaving = true);
-    final Uint8List? pngBytes = await _capturePng();
-    if (pngBytes != null) {
-      final result = await ImageGallerySaver.saveImage(pngBytes, name: "phoneshame_score_${DateTime.now().millisecondsSinceEpoch}");
+    HapticFeedback.lightImpact();
+    final bytes = await _capture();
+    if (bytes != null) {
+      final result = await ImageGallerySaver.saveImage(
+          bytes,
+          name: 'rot_${DateTime.now().millisecondsSinceEpoch}');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['isSuccess'] ? 'Saved to gallery' : 'Failed to save'),
-            backgroundColor: result['isSuccess'] ? AppColors.primary : Colors.red,
-          )
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(result['isSuccess'] ? 'Saved to gallery ✓' : 'Failed to save'),
+          backgroundColor: result['isSuccess'] ? context.colors.green : context.colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ));
       }
     }
     setState(() => _isSaving = false);
   }
 
-  Future<void> _shareImage() async {
+  Future<void> _share() async {
     setState(() => _isSaving = true);
-    final Uint8List? pngBytes = await _capturePng();
-    if (pngBytes != null) {
-       await Share.shareXFiles(
-        [XFile.fromData(pngBytes, mimeType: 'image/png', name: 'shame_score.png')],
-        text: 'My PhoneShame score is ${widget.score}. I need help.',
+    HapticFeedback.lightImpact();
+    final bytes = await _capture();
+    if (bytes != null) {
+      await Share.shareXFiles(
+        [XFile.fromData(bytes, mimeType: 'image/png', name: 'rot_score.png')],
+        text: 'My ROT score is ${widget.score}. I need help. 💀',
       );
     }
     setState(() => _isSaving = false);
@@ -73,53 +79,126 @@ class _ShareScreenState extends State<ShareScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const PhoneShameAppBar(title: "Your Card"),
+      backgroundColor: context.colors.bg,
+      appBar: AppBar(
+        backgroundColor:       context.colors.bg,
+        elevation:             0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: context.colors.textPrimary, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'your rot card',
+          style: GoogleFonts.poppins(
+            color:      context.colors.textPrimary,
+            fontSize:   18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(24),
         child: Column(
           children: [
             Center(
               child: ShareCardWidget(
-                repaintKey: _repaintKey,
-                score: widget.score,
-                totalTime: widget.totalTimeStr,
-                topApp: widget.topApp,
+                repaintKey:   _repaintKey,
+                score:        widget.score,
+                totalTime:    widget.totalTimeStr,
+                topApp:       widget.topApp,
                 roastSnippet: widget.roastSnippet,
               ),
             ),
-            const SizedBox(height: 48),
+            const SizedBox(height: 32),
+
+            // Action buttons
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
-                     onPressed: _isSaving ? null : _saveToGallery,
-                     icon: const Icon(Icons.download),
-                     label: const Text("Save"),
-                     style: OutlinedButton.styleFrom(
-                       padding: const EdgeInsets.symmetric(vertical: 16),
-                       foregroundColor: AppColors.primary,
-                       side: const BorderSide(color: AppColors.primary),
-                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                     ),
+                  child: _ActionButton(
+                    label:    'save',
+                    icon:     Icons.download_rounded,
+                    bg:       context.colors.surface,
+                    fg:       context.colors.textPrimary,
+                    border:   context.colors.border,
+                    loading:  _isSaving,
+                    onTap:    _save,
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton.icon(
-                     onPressed: _isSaving ? null : _shareImage,
-                     icon: const Icon(Icons.share, color: Colors.white),
-                     label: const Text("Share", style: TextStyle(color: Colors.white)),
-                     style: ElevatedButton.styleFrom(
-                       backgroundColor: AppColors.primary,
-                       padding: const EdgeInsets.symmetric(vertical: 16),
-                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                     ),
+                  child: _ActionButton(
+                    label:   'share',
+                    icon:    Icons.share_rounded,
+                    bg:      context.colors.purple,
+                    fg:      context.colors.bg,
+                    loading: _isSaving,
+                    onTap:   _share,
                   ),
                 ),
               ],
-            )
+            ),
+            const SizedBox(height: 16),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final String  label;
+  final IconData icon;
+  final Color   bg;
+  final Color   fg;
+  final Color?  border;
+  final bool    loading;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.bg,
+    required this.fg,
+    this.border,
+    required this.loading,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: loading ? null : onTap,
+      child: Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color:        bg,
+          borderRadius: BorderRadius.circular(16),
+          border:       border != null ? Border.all(color: border!) : null,
+        ),
+        alignment: Alignment.center,
+        child: loading
+            ? SizedBox(
+                width: 20, height: 20,
+                child: CircularProgressIndicator(
+                    color: fg, strokeWidth: 2))
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: fg, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    label,
+                    style: GoogleFonts.poppins(
+                      color:      fg,
+                      fontSize:   16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }

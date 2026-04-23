@@ -14,7 +14,7 @@ void main() async {
 
   runApp(
     const ProviderScope(
-      child: PhoneShameApp(),
+      child: ROTApp(),
     ),
   );
 }

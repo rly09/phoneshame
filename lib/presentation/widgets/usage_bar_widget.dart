@@ -1,32 +1,86 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../core/constants/app_colors.dart';
 import '../../data/models/app_usage_model.dart';
 import '../../core/utils/time_formatter.dart';
-import '../../core/constants/app_colors.dart';
+import 'app_icon_widget.dart';
 
-class UsageBarWidget extends StatelessWidget {
+class UsageBarWidget extends StatefulWidget {
   final List<AppUsageModel> apps;
-
   const UsageBarWidget({super.key, required this.apps});
 
-  Color _getScoreColor(int totalMinutes) {
-    if (totalMinutes <= 400) return AppColors.green;
-    if (totalMinutes <= 700) return AppColors.amber;
-    return AppColors.red;
+  @override
+  State<UsageBarWidget> createState() => _UsageBarWidgetState();
+}
+
+class _UsageBarWidgetState extends State<UsageBarWidget>
+    with TickerProviderStateMixin {
+  late List<AnimationController> _controllers;
+  late List<Animation<Offset>>   _slideAnims;
+
+  @override
+  void initState() {
+    super.initState();
+    _buildAnimations(widget.apps.length);
+  }
+
+  @override
+  void didUpdateWidget(UsageBarWidget old) {
+    super.didUpdateWidget(old);
+    if (old.apps != widget.apps) {
+      for (final c in _controllers) { c.dispose(); }
+      _buildAnimations(widget.apps.length);
+    }
+  }
+
+  void _buildAnimations(int count) {
+    _controllers = List.generate(count, (i) => AnimationController(
+      vsync:    this,
+      duration: const Duration(milliseconds: 300),
+    ));
+    _slideAnims = _controllers.map((c) => Tween<Offset>(
+      begin: const Offset(0, 0.4),
+      end:   Offset.zero,
+    ).animate(CurvedAnimation(parent: c, curve: Curves.easeOutCubic))).toList();
+
+    // Staggered start: 60ms between each, cap at 15 so long lists don't take forever
+    for (int i = 0; i < _controllers.length; i++) {
+      final delay = i < 15 ? i * 60 : 900;
+      Future.delayed(Duration(milliseconds: delay), () {
+        if (mounted) _controllers[i].forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) { c.dispose(); }
+    super.dispose();
+  }
+
+  Color _barColor(BuildContext context, int minutes) {
+    // Per-app usage bar color
+    if (minutes < 30)  return context.colors.green;
+    if (minutes < 120) return context.colors.amber;
+    return context.colors.red;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (apps.isEmpty) {
+    if (widget.apps.isEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 32.0),
+          padding: const EdgeInsets.symmetric(vertical: 48),
           child: Column(
             children: [
-              Icon(Icons.hourglass_empty, size: 48, color: AppColors.primary.withAlpha(100)),
+              const Text('😅', style: TextStyle(fontSize: 48)),
               const SizedBox(height: 16),
               Text(
-                "open some apps first 😅",
-                style: TextStyle(fontSize: 16, color: AppColors.primary.withAlpha(150)),
+                'open some apps first',
+                style: GoogleFonts.poppins(
+                  color:    context.colors.textSecondary,
+                  fontSize: 16,
+                ),
               ),
             ],
           ),
@@ -34,70 +88,71 @@ class UsageBarWidget extends StatelessWidget {
       );
     }
 
-    final topApps = apps.take(5).toList();
-    final maxUsageStr = topApps.first.totalTimeInMinutes;
-    final maxUsage = maxUsageStr > 0 ? maxUsageStr : 1;
-    final totalMinutes = apps.fold<int>(0, (sum, item) => sum + item.totalTimeInMinutes);
-    final barColor = _getScoreColor(totalMinutes);
+    final topApps = widget.apps;
+    final maxMins = topApps.first.totalTimeInMinutes > 0
+        ? topApps.first.totalTimeInMinutes
+        : 1;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 24.0),
-          child: Text(
-            "WHERE YOUR TIME WENT",
-            style: TextStyle(
-              fontSize: 14, 
-              fontWeight: FontWeight.w600, 
-              letterSpacing: 2,
-              color: AppColors.primary,
-            ),
+        Text(
+          'WHERE YOUR TIME WENT',
+          style: GoogleFonts.poppins(
+            fontSize:      11,
+            fontWeight:    FontWeight.w600,
+            letterSpacing: 1.5,
+            color:         context.colors.textTertiary,
           ),
         ),
+        const SizedBox(height: 16),
         Container(
           decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color,
+            color:        context.colors.surface,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
+            border:       Border.all(color: context.colors.border),
+            boxShadow: isDark ? null : [
               BoxShadow(
-                color: Colors.black.withAlpha(10),
+                color: AppColors.cDarkest.withOpacity(0.03),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               )
-            ]
+            ],
           ),
-          child: Column(
-            children: topApps.asMap().entries.map((entry) {
-              final index = entry.key;
-              final app = entry.value;
-              final fraction = app.totalTimeInMinutes / maxUsage;
-              
-              return Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 365),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  children: List.generate(topApps.length, (i) {
+              final app      = topApps[i];
+              final fraction = app.totalTimeInMinutes / maxMins;
+              final color    = _barColor(context, app.totalTimeInMinutes);
+
+              final row = FadeTransition(
+                opacity: i < _controllers.length
+                    ? _controllers[i]
+                    : const AlwaysStoppedAnimation(1.0),
+                child: SlideTransition(
+                  position: i < _slideAnims.length
+                      ? _slideAnims[i]
+                      : const AlwaysStoppedAnimation(Offset.zero),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppColors.lightPurple,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Text(
-                              app.appName.isNotEmpty ? app.appName[0].toUpperCase() : '?',
-                              style: const TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
-                            ),
-                          ),
+                        // Real app icon
+                        AppIconWidget(
+                          packageName:   app.packageName,
+                          appName:       app.appName,
+                          size:          40,
+                          fallbackColor: color,
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,27 +163,34 @@ class UsageBarWidget extends StatelessWidget {
                                   Expanded(
                                     child: Text(
                                       app.appName,
-                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                      maxLines:     1,
+                                      overflow:     TextOverflow.ellipsis,
+                                      style: GoogleFonts.poppins(
+                                        color:      context.colors.textPrimary,
+                                        fontSize:   15,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                                   Text(
-                                    TimeFormatter.formatMinutesToHours(app.totalTimeInMinutes),
-                                    style: TextStyle(
+                                    TimeFormatter.formatMinutesToHours(
+                                        app.totalTimeInMinutes),
+                                    style: GoogleFonts.poppins(
+                                      color:      context.colors.textSecondary,
+                                      fontSize:   13,
                                       fontWeight: FontWeight.w500,
-                                      color: Theme.of(context).textTheme.bodyLarge?.color?.withAlpha(150),
                                     ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              CustomPaint(
-                                size: const Size(double.infinity, 8),
-                                painter: BarChartPainter(
-                                  fraction: fraction,
-                                  color: barColor,
-                                  backgroundColor: barColor.withAlpha(30),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: LinearProgressIndicator(
+                                  value:            fraction.clamp(0.0, 1.0),
+                                  backgroundColor:  context.colors.border,
+                                  valueColor:       AlwaysStoppedAnimation(color),
+                                  minHeight:        4,
                                 ),
                               ),
                             ],
@@ -137,60 +199,23 @@ class UsageBarWidget extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (index < topApps.length - 1)
-                    Divider(height: 1, color: Colors.grey.withAlpha(30), indent: 72, endIndent: 16),
-                ],
+                ),
               );
-            }).toList(),
+
+              if (i < topApps.length - 1) {
+                return Column(children: [
+                  row,
+                  Divider(height: 1, indent: 70, endIndent: 16, color: context.colors.border),
+                ]);
+              }
+              return row;
+            }),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
       ],
     );
-  }
-}
-
-class BarChartPainter extends CustomPainter {
-  final double fraction;
-  final Color color;
-  final Color backgroundColor;
-
-  BarChartPainter({
-    required this.fraction,
-    required this.color,
-    required this.backgroundColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bgPaint = Paint()
-      ..color = backgroundColor
-      ..style = PaintingStyle.fill;
-    
-    final bgRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      const Radius.circular(4),
-    );
-    canvas.drawRRect(bgRect, bgPaint);
-
-    final fgPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    
-    final fgWidth = size.width * fraction;
-    
-    if (fgWidth > 0) {
-       final fgRect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, fgWidth, size.height),
-        const Radius.circular(4),
-      );
-      canvas.drawRRect(fgRect, fgPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant BarChartPainter oldDelegate) {
-    return oldDelegate.fraction != fraction || 
-           oldDelegate.color != color ||
-           oldDelegate.backgroundColor != backgroundColor;
   }
 }
