@@ -12,5 +12,10 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             UsageStatsPlugin.CHANNEL_NAME
         ).setMethodCallHandler(UsageStatsPlugin(this))
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            HomeWidgetBridge.CHANNEL_NAME
+        ).setMethodCallHandler(HomeWidgetBridge(this))
     }
 }

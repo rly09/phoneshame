@@ -9,6 +9,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/score_calculator.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/app_usage_model.dart';
+import '../../data/services/home_widget_service.dart';
 import '../../providers/usage_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../widgets/animated_rot_ring.dart';
@@ -29,6 +30,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   late AnimationController _pulseCtrl;
   late Animation<double>   _pulseAnim;
   Timer? _midnightTimer;
+  ProviderSubscription<AsyncValue<List<AppUsageModel>>>? _usageSubscription;
 
   String _vsYesterdayStr       = '—';
   bool   _vsYesterdayPositive  = false;
@@ -44,6 +46,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _pulseAnim = Tween<double>(begin: 1.0, end: 1.02).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
+    _usageSubscription = ref.listenManual<AsyncValue<List<AppUsageModel>>>(
+      usageProvider,
+      (_, next) {
+        next.whenData((apps) {
+          unawaited(HomeWidgetService.syncUsageSummary(apps));
+        });
+      },
+    );
     _scheduleMidnightRefresh();
   }
 
@@ -51,6 +61,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _midnightTimer?.cancel();
+    _usageSubscription?.close();
     _pulseCtrl.dispose();
     super.dispose();
   }
