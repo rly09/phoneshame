@@ -13,19 +13,20 @@ class ROTAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return AppBar(
-      backgroundColor:       AppColors.bg,
+      backgroundColor:       colors.bg,
       elevation:             0,
       scrolledUnderElevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new_rounded,
-            color: AppColors.textPrimary, size: 20),
+        icon: Icon(Icons.arrow_back_ios_new_rounded,
+            color: colors.textPrimary, size: 20),
         onPressed: () => Navigator.maybePop(context),
       ),
       title: Text(
         title,
         style: GoogleFonts.poppins(
-          color:      AppColors.textPrimary,
+          color:      colors.textPrimary,
           fontSize:   18,
           fontWeight: FontWeight.w700,
         ),

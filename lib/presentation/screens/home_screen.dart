@@ -9,6 +9,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/score_calculator.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/app_usage_model.dart';
+import '../../data/services/daily_roast_service.dart';
 import '../../data/services/home_widget_service.dart';
 import '../../providers/usage_provider.dart';
 import '../../providers/theme_provider.dart';
@@ -17,6 +18,7 @@ import '../widgets/roast_bottom_sheet.dart';
 import '../widgets/skeleton_loader.dart';
 import '../widgets/usage_bar_widget.dart';
 import 'streak_screen.dart';
+import 'yesterday_damage_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -34,6 +36,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   String _vsYesterdayStr       = '—';
   bool   _vsYesterdayPositive  = false;
+  bool   _hasYesterdayRoast    = false;
 
   @override
   void initState() {
@@ -55,6 +58,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       },
     );
     _scheduleMidnightRefresh();
+    _checkYesterdayRoast();
   }
 
   @override
@@ -81,6 +85,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ref.invalidate(usageProvider);
       _scheduleMidnightRefresh();
     });
+  }
+
+  Future<void> _checkYesterdayRoast() async {
+    final data = await DailyRoastService.getCachedRoastData();
+    if (!mounted) return;
+    setState(() => _hasYesterdayRoast = data != null);
   }
 
   Future<void> _calculateVsYesterday(int todayMinutes) async {
@@ -182,44 +192,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             ],
                           ),
                         ),
-                        // Theme toggle button
-                        GestureDetector(
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            ref.read(themeProvider.notifier).toggleTheme();
-                          },
-                          child: Container(
-                            width:  44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color:  context.colors.surface,
-                              shape:  BoxShape.circle,
-                              border: Border.all(color: context.colors.border),
-                              boxShadow: isDark ? null : [
-                                BoxShadow(
-                                  color: AppColors.cDarkest.withOpacity(0.04),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                )
-                              ],
-                            ),
-                            child: Center(
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 300),
-                                transitionBuilder: (child, anim) => RotationTransition(
-                                  turns: child.key == const ValueKey('moon') 
-                                    ? Tween<double>(begin: 0.5, end: 1).animate(anim)
-                                    : Tween<double>(begin: 0.5, end: 1).animate(anim),
-                                  child: FadeTransition(opacity: anim, child: child),
-                                ),
-                                child: isDark
-                                    ? const Icon(Icons.nightlight_round, key: ValueKey('moon'), size: 20, color: AppColors.cLight)
-                                    : const Icon(Icons.wb_sunny_rounded, key: ValueKey('sun'), size: 20, color: AppColors.cPrimary),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
+
                         // Streak button
                         GestureDetector(
                           onTap: () => Navigator.push(
@@ -284,6 +257,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       ],
                     ),
                     const SizedBox(height: 40),
+
+                    // ── Yesterday's Damage banner ─────────────────────────
+                    if (_hasYesterdayRoast)
+                      _YesterdayBanner(
+                        onTap: () => Navigator.push(
+                          context,
+                          PageRouteBuilder(
+                            pageBuilder:        (_, __, ___) => const YesterdayDamageScreen(),
+                            transitionsBuilder: (_, anim, __, child) =>
+                                FadeTransition(opacity: anim, child: child),
+                            transitionDuration: const Duration(milliseconds: 250),
+                          ),
+                        ),
+                      ),
+
+                    if (_hasYesterdayRoast) const SizedBox(height: 16),
 
                     // ── Usage list ────────────────────────────────────────
                     UsageBarWidget(apps: apps),
@@ -355,6 +344,81 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Yesterday's Damage banner ────────────────────────────────────────────────
+
+class _YesterdayBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _YesterdayBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color:        context.colors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: context.colors.red.withAlpha(80)),
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color:      AppColors.cDarkest.withAlpha(8),
+                    blurRadius: 10,
+                    offset:     const Offset(0, 3),
+                  )
+                ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width:  36,
+              height: 36,
+              decoration: BoxDecoration(
+                color:  context.colors.red.withAlpha(25),
+                shape:  BoxShape.circle,
+              ),
+              child: const Center(
+                child: Text('💀', style: TextStyle(fontSize: 18)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "yesterday's damage is in",
+                    style: GoogleFonts.poppins(
+                      color:      context.colors.textPrimary,
+                      fontSize:   13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    'tap to see your ai roast',
+                    style: GoogleFonts.poppins(
+                      color:    context.colors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size:  14,
+              color: context.colors.textTertiary,
+            ),
+          ],
         ),
       ),
     );

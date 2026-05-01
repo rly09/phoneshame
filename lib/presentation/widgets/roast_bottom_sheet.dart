@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/score_calculator.dart';
+import '../../data/services/daily_roast_service.dart';
 import '../../providers/roast_provider.dart';
 import '../../providers/usage_provider.dart';
 import '../screens/share_screen.dart';
@@ -23,6 +24,9 @@ class _RoastBottomSheetState extends ConsumerState<RoastBottomSheet> {
   int    _charIndex = 0;
   String _fullText  = '';
   bool   _roastDone = false;
+
+  List<String>? _alternatives;
+  bool          _altLoading = false;
 
   @override
   void dispose() {
@@ -48,8 +52,23 @@ class _RoastBottomSheetState extends ConsumerState<RoastBottomSheet> {
       } else {
         t.cancel();
         setState(() => _roastDone = true);
+        // Start loading AI alternatives once roast finishes typing
+        _loadAlternatives();
       }
     });
+  }
+
+  Future<void> _loadAlternatives() async {
+    if (_alternatives != null || _altLoading) return;
+    setState(() => _altLoading = true);
+    final apps = ref.read(usageProvider).valueOrNull ?? [];
+    final totalMins = apps.fold<int>(0, (s, a) => s + a.totalTimeInMinutes);
+    final topApps = apps.take(3).map((a) => a.appName).toList();
+    final result = await AlternativesService.generate(
+      totalMinutes: totalMins,
+      topApps: topApps,
+    );
+    if (mounted) setState(() { _alternatives = result; _altLoading = false; });
   }
 
   @override
@@ -175,11 +194,29 @@ class _RoastBottomSheetState extends ConsumerState<RoastBottomSheet> {
                     if (_roastDone || roastAsync.hasError)
                       usageAsync.when(
                         data: (apps) {
-                          final totalMins = apps.fold<int>(
-                              0, (s, a) => s + a.totalTimeInMinutes);
-                          final alternatives =
-                              ScoreCalculator.getAlternatives(totalMins);
-                          if (alternatives.isEmpty) return const SizedBox();
+                          // Show shimmer while AI is generating
+                          if (_altLoading) {
+                            return Shimmer.fromColors(
+                              baseColor:      context.colors.elevated,
+                              highlightColor: context.colors.border,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(height: 11, width: 130, color: context.colors.elevated,
+                                      margin: const EdgeInsets.only(bottom: 16)),
+                                  ...List.generate(3, (_) => Container(
+                                    height: 14, width: double.infinity,
+                                    color: context.colors.elevated,
+                                    margin: const EdgeInsets.only(bottom: 14),
+                                  )),
+                                ],
+                              ),
+                            );
+                          }
+
+                          final totalMins = apps.fold<int>(0, (s, a) => s + a.totalTimeInMinutes);
+                          final items = _alternatives ?? ScoreCalculator.getAlternatives(totalMins);
+                          if (items.isEmpty) return const SizedBox();
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,26 +231,26 @@ class _RoastBottomSheetState extends ConsumerState<RoastBottomSheet> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              ...alternatives.asMap().entries.map((entry) {
+                              ...items.asMap().entries.map((entry) {
                                 final i   = entry.key;
                                 final alt = entry.value;
                                 return TweenAnimationBuilder<double>(
                                   tween:    Tween(begin: 0, end: 1),
-                                  duration: Duration(milliseconds: 300 + i * 100),
+                                  duration: Duration(milliseconds: 300 + i * 120),
                                   curve:    Curves.easeOutCubic,
                                   builder:  (ctx, v, child) => Opacity(
                                     opacity: v,
                                     child:   Transform.translate(
-                                      offset: Offset(0, 16 * (1 - v)),
+                                      offset: Offset(0, 14 * (1 - v)),
                                       child:  child,
                                     ),
                                   ),
                                   child: Padding(
                                     padding: const EdgeInsets.only(bottom: 14),
                                     child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        const Text('✨',
-                                            style: TextStyle(fontSize: 20)),
+                                        const Text('✨', style: TextStyle(fontSize: 20)),
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Text(
@@ -221,6 +258,7 @@ class _RoastBottomSheetState extends ConsumerState<RoastBottomSheet> {
                                             style: GoogleFonts.poppins(
                                               color:    context.colors.textPrimary,
                                               fontSize: 15,
+                                              height:   1.4,
                                             ),
                                           ),
                                         ),

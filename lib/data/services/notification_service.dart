@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -8,7 +9,9 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_usage_model.dart';
 import './usage_stats_service.dart';
+import './daily_roast_service.dart';
 import '../../core/utils/score_calculator.dart';
+import '../../core/utils/time_formatter.dart';
 import 'platform_notifications_helper_stub.dart'
     if (dart.library.io) 'platform_notifications_helper_io.dart';
 
@@ -21,9 +24,13 @@ class NotificationService {
   final _random = Random();
 
   static const String _yesterdayScoreKey = 'yesterday_shame_score';
-  static const int nudgeId = 3;
+  static const int nudgeId   = 3;
   static const int morningId = 1;
   static const int eveningId = 2;
+  static const String _roastNotifTappedKey = 'roast_notif_tapped';
+
+  // For routing on notification tap — set from outside
+  static void Function()? onDailyRoastTapped;
 
   Future<void> init() async {
     tz_data.initializeTimeZones();
@@ -52,7 +59,10 @@ class NotificationService {
     await _notifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (details) {
-        // Handle notification tap if needed
+        // When the user taps the morning roast notification, invoke the callback
+        if (details.id == morningId) {
+          onDailyRoastTapped?.call();
+        }
       },
     );
   }
@@ -76,25 +86,53 @@ class NotificationService {
     // Save today's score to be used as yesterday's score for the next morning notification
     await prefs.setInt(_yesterdayScoreKey, todayScore);
 
-    await _scheduleMorningMotivation(yesterdayScore);
+    // Generate and cache the AI roast for tomorrow morning's notification
+    // Run async; don't block notification scheduling
+    if (todayUsage.isNotEmpty) {
+      final topApp = todayUsage.first.appName;
+      final topAppMins = TimeFormatter.formatMinutesToHours(todayUsage.first.totalTimeInMinutes);
+      final topApps = todayUsage.take(3).map((a) => a.appName).toList();
+      unawaited(DailyRoastService().generateAndCache(
+        totalMinutes: totalMinutes,
+        score:        todayScore,
+        topApp:       topApp,
+        topAppMinutes: topAppMins,
+        topApps:      topApps,
+      ));
+    }
+
+    await _scheduleMorningRoast();
     await _scheduleEveningReport(todayScore, totalMinutes);
     await _scheduleNudge();
   }
 
-  Future<void> _scheduleMorningMotivation(int yesterdayScore) async {
-    String body;
-    if (yesterdayScore < 500) {
-      body = "yesterday you scored $yesterdayScore. can you do worse today?";
-    } else {
-      body = "yesterday: $yesterdayScore shame points. today is a fresh start.";
-    }
+  Future<void> _scheduleMorningRoast() async {
+    // Try to use yesterday's cached AI roast; fall back to the old generic message
+    final cachedRoast = await DailyRoastService.getCachedRoastText();
+    final String body = cachedRoast != null && cachedRoast.isNotEmpty
+        ? cachedRoast
+        : "your daily damage report is in. tap to see what you wasted yesterday.";
 
-    await _scheduleDailyNotification(
-      id: morningId,
-      title: "good morning 👋",
-      body: body,
-      hour: 8,
-      minute: 0,
+    await _notifications.zonedSchedule(
+      morningId,
+      'good morning. 💀',
+      body,
+      _nextInstanceOfTime(9, 0),
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          'daily_roast',
+          'Daily Roast',
+          channelDescription: 'Morning AI roast of your yesterday screen time',
+          importance: Importance.max,
+          priority:   Priority.high,
+          styleInformation: BigTextStyleInformation(body),
+        ),
+        iOS: const DarwinNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: DateTimeComponents.time,
     );
   }
 

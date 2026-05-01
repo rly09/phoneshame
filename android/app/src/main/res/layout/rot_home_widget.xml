@@ -13,7 +13,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="TODAY'S ROT"
-        android:textColor="#99EAF9E7"
+        android:textColor="@color/widget_text_secondary"
         android:textSize="12sp"
         android:textStyle="bold" />
 
@@ -23,7 +23,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="0m"
-        android:textColor="#EAF9E7"
+        android:textColor="@color/widget_text_primary"
         android:textSize="32sp"
         android:textStyle="bold" />
 
@@ -33,7 +33,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:text="ROT SCORE"
-        android:textColor="#99EAF9E7"
+        android:textColor="@color/widget_text_secondary"
         android:textSize="11sp" />
 
     <TextView
@@ -53,7 +53,7 @@
         android:layout_marginTop="12dp"
         android:maxLines="2"
         android:text="Open the app to sync today's stats"
-        android:textColor="#EAF9E7"
+        android:textColor="@color/widget_text_primary"
         android:textSize="14sp" />
 
     <TextView
@@ -62,7 +62,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:text="Waiting for first sync"
-        android:textColor="#99EAF9E7"
+        android:textColor="@color/widget_text_secondary"
         android:textSize="11sp" />
 
 </LinearLayout>

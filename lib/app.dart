@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:io';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_strings.dart';
 import 'presentation/screens/onboarding_screen.dart';
 import 'presentation/screens/permission_screen.dart';
+import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/yesterday_damage_screen.dart';
 import 'providers/theme_provider.dart';
 import 'data/services/notification_service.dart';
+import 'data/services/usage_stats_service.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+
+// Global navigator key so notifications can push routes from outside the widget tree
+final _navigatorKey = GlobalKey<NavigatorState>();
 
 class ROTApp extends ConsumerWidget {
   const ROTApp({super.key});
@@ -28,6 +36,7 @@ class ROTApp extends ConsumerWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
+      navigatorKey: _navigatorKey,
       home: const _RootRouter(),
       debugShowCheckedModeBanner: false,
     );
@@ -51,6 +60,17 @@ class _RootRouterState extends State<_RootRouter> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _resolve();
     _handleNotifications();
+    // Register the morning roast notification tap handler
+    NotificationService.onDailyRoastTapped = () {
+      _navigatorKey.currentState?.push(
+        PageRouteBuilder(
+          pageBuilder:        (_, __, ___) => const YesterdayDamageScreen(),
+          transitionsBuilder: (_, anim, __, child) =>
+              FadeTransition(opacity: anim, child: child),
+          transitionDuration: const Duration(milliseconds: 250),
+        ),
+      );
+    };
   }
 
   @override
@@ -79,23 +99,32 @@ class _RootRouterState extends State<_RootRouter> with WidgetsBindingObserver {
     if (!mounted) return;
     
     if (!done) {
-      // First launch logic (if any other than permissions)
+      setState(() {
+        _home = const OnboardingScreen();
+      });
+      FlutterNativeSplash.remove();
+      return;
     }
 
+    bool hasPermission = false;
+    if (Platform.isAndroid) {
+      hasPermission = await UsageStatsService().checkPermission();
+    }
+
+    if (!mounted) return;
+
     setState(() {
-      _home = done ? const PermissionScreen() : const OnboardingScreen();
+      _home = hasPermission ? const HomeScreen() : const PermissionScreen();
     });
+    
+    // Remove the native splash screen ONLY after we know exactly what screen to show
+    FlutterNativeSplash.remove();
   }
 
   @override
   Widget build(BuildContext context) {
     if (_home == null) {
-      return Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const SizedBox.shrink();
     }
     return _home!;
   }

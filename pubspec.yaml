@@ -37,18 +37,15 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/icon.png"
+  image_path: "assets/icon_dark.png"
   min_sdk_android: 21
   adaptive_icon_background: "#013237"
-  adaptive_icon_foreground: "assets/icon.png"
+  adaptive_icon_foreground: "assets/icon_dark.png"
 
 flutter_native_splash:
-  color: "#EAF9E7"
-  color_dark: "#013237"
-  image: "assets/icon.png"
-  brand: "ROT"
+  color: "#013237"
+  image: "assets/icon_dark.png"
   android_12:
-    image: "assets/icon.png"
-    color: "#EAF9E7"
-    color_dark: "#013237"
+    image: "assets/icon_dark.png"
+    color: "#013237"
   fullscreen: false

@@ -25,6 +25,23 @@ class RotHomeWidgetProvider : AppWidgetProvider() {
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
         HomeWidgetBridge.refreshWidgets(context)
+
+        // Start background worker
+        val workRequest = androidx.work.PeriodicWorkRequestBuilder<RotWidgetWorker>(
+            15, java.util.concurrent.TimeUnit.MINUTES
+        ).build()
+        
+        androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "RotWidgetWorker",
+            androidx.work.ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+    }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        // Optionally cancel the work when the last widget is removed
+        androidx.work.WorkManager.getInstance(context).cancelUniqueWork("RotWidgetWorker")
     }
 
     companion object {
